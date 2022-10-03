@@ -70,7 +70,7 @@ plot.colormap = function(X,Y,Z, zlim, col, cex, xlim, ylim, ...){
 # Works with either color and trans a vector of equal length,
 # or one of the two of length 1.
 addTrans <- function(color,trans){
-  
+  trans = trans*255
   if (length(color)!=length(trans)&!any(c(length(color),length(trans))==1)) stop("Vector lengths not correct")
   if (length(color)==1 & length(trans)>1) color <- rep(color,length(trans))
   if (length(trans)==1 & length(color)>1) trans <- rep(trans,length(color))
@@ -112,7 +112,7 @@ NcCreateOneShot<- function(filename,var_name, glimits = numeric(0), tlim = NA){
   if (has_lev){
     lev<- ncvar_get(ncin, "lev")
   }
-    
+  
   latSN = T
   if (lat[2] < lat[1]) latSN=F
   
@@ -133,7 +133,7 @@ NcCreateOneShot<- function(filename,var_name, glimits = numeric(0), tlim = NA){
   ilonf = length(which(lon<=lonf))
   ilat0 = max(1, length(which(lat<=lat0)))
   ilatf = length(which(lat<=latf))
-
+  
   time<- ncvar_get(ncin,"time")
   tunits <- ncatt_get(ncin,"time","units")
   tustr <- strsplit(tunits$value, " ")
@@ -163,11 +163,11 @@ NcCreateOneShot<- function(filename,var_name, glimits = numeric(0), tlim = NA){
   }
   
   nc = list(name=var_name,
-       data=dat,
-       lons=lon[ilon0:ilonf],
-       lats=lat[ilat0:ilatf],
-       time=time1,
-       month = as.numeric(strftime(time1, format = "%m"))
+            data=dat,
+            lons=lon[ilon0:ilonf],
+            lats=lat[ilat0:ilatf],
+            time=time1,
+            month = as.numeric(strftime(time1, format = "%m"))
   )
   if (has_lev) nc$levs = lev
   
@@ -199,9 +199,20 @@ NcClipTime = function(ncset, start, end){
 }
 
 
-# Plot a netcdf file
-plot.netcdf = function(dat, zlim, col=rainbow(1000,start=0,end=0.8), ilev=1, itime=1, shp = NULL, preserve_layout=F, main="", ...){
-  if (length(dim(dat$data)) == 3) dat$data = dat$data[,,ilev]
+# Repeat a spatial-only grid (nc) for given timesteps and add a time dimension to it
+NcSelectLevel = function(nc, ilev){
+  if (length(dim(nc$data)) == 3) nc$data = nc$data[,,ilev]
+  else if (length(dim(nc$data)) == 4) nc$data = nc$data[,,ilev,]
+  nc$levs = ilev
+  nc$name = paste0(nc$name, "_", ilev)
+  nc
+}
+
+
+# Plot a netcdf file 
+# FIXME: (Need to distinguish 3rd dimension as level vs time)
+plot.netcdf = function(dat, zlim, col=rainbow(1000,start=0,end=0.8), ilev=1, itime=1, shp = NULL, shp_col="grey", preserve_layout=F, main="", ...){
+  if (length(dim(dat$data)) == 3) dat$data = dat$data[,,itime]
   else if (length(dim(dat$data)) == 4) dat$data = dat$data[,,ilev,itime]
   
   par_back = par()
@@ -211,7 +222,7 @@ plot.netcdf = function(dat, zlim, col=rainbow(1000,start=0,end=0.8), ilev=1, iti
   }
   
   image(x=dat$lon, y=dat$lat, z=dat$data, zlim=zlim, col=col, xlab="Lon", ylab="Lat", main=main, ...)
-  if (!is.null(shp)) plot(shp, add=T)
+  if (!is.null(shp)) plot(shp$geometry, add=T, border=shp_col, lwd=0.6)
   image(x=seq(zlim[1],zlim[2],length.out=1000), y=1, z=matrix(seq(zlim[1],zlim[2],length.out=1000)), zlim = zlim, col=col, yaxt="n", ylab="", xlab=main, cex.lab=1.5)
   par = par_back
 }
@@ -263,7 +274,7 @@ read.fireData_gfed = function(dataset, dir, regions=NULL){
     }
     datf = datf[ids, ]
   }    
-
+  
   daty = read.delim(paste0(dir,"/y_predic_ba_",dataset,".txt"), header=F, sep=" ")
   # nfires_classes = c(0,1,sqrt(fire_classes[2:length(fire_classes)]* c(fire_classes[3:length(fire_classes)])))
   # nfires_pred = apply(X=daty, MARGIN=1, FUN=function(x){sum(nfires_classes*x)})
@@ -273,7 +284,7 @@ read.fireData_gfed = function(dataset, dir, regions=NULL){
   ba_classes = c(0, seq(-6,0,by=0.25))
   ba_classes_mids = 10^(ba_classes[-1] - diff(ba_classes)/2)
   ba_classes_mids[1] = 0
-
+  
   datf$ba.pred = apply(X=daty, MARGIN=1, FUN=function(x){sum(ba_classes_mids*x)})
   datf$ba.pred = datf$ba.pred - 0.000
   datf$ba.pred[datf$ba.pred < 0] = 0;
@@ -323,3 +334,4 @@ read.fireData_gfed = function(dataset, dir, regions=NULL){
 #   y = t(apply(X = x, MARGIN = 1, FUN = function(x) {exp(x-max(x))/sum(exp(x-max(x)))} ))
 #   y
 # }
+
